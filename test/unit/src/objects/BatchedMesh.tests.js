@@ -92,6 +92,61 @@ export default QUnit.module( 'Objects', () => {
 
 		} );
 
+		QUnit.test( 'customCull per-camera instance culling', ( assert ) => {
+
+			const material = new MeshBasicMaterial();
+			const camera = new PerspectiveCamera();
+			const shadowCamera = new PerspectiveCamera();
+			camera.updateMatrixWorld();
+			shadowCamera.updateMatrixWorld();
+
+			const batchedMesh = new BatchedMesh( 4, 1000, 2000, material );
+			batchedMesh.perObjectFrustumCulled = false;
+			batchedMesh.sortObjects = false;
+
+			const geomId = batchedMesh.addGeometry( new BoxGeometry() );
+			batchedMesh.addInstance( geomId );
+			batchedMesh.addInstance( geomId );
+
+			const customCull = ( instanceId, activeCamera ) => {
+
+				// Cull instance 1 from the main camera, but keep it for shadowCamera
+				if ( activeCamera === camera && instanceId === 1 ) return true;
+				return false;
+
+			};
+
+			batchedMesh.setCustomCull( customCull );
+			assert.strictEqual( batchedMesh.customCull, customCull, 'customCull is set correctly' );
+
+			// Unsorted test
+			batchedMesh.onBeforeRender( {}, null, camera, batchedMesh.geometry, material );
+			assert.strictEqual( batchedMesh._multiDrawCount, 1, 'main camera draws only instance 0' );
+
+			batchedMesh.onBeforeShadow( {}, batchedMesh, camera, shadowCamera, batchedMesh.geometry, material );
+			assert.strictEqual( batchedMesh._multiDrawCount, 2, 'shadow camera draws both instances' );
+
+			// Sorted test
+			batchedMesh.sortObjects = true;
+			batchedMesh.onBeforeRender( {}, null, camera, batchedMesh.geometry, material );
+			assert.strictEqual( batchedMesh._multiDrawCount, 1, 'sorted main camera draws only instance 0' );
+
+			batchedMesh.onBeforeShadow( {}, batchedMesh, camera, shadowCamera, batchedMesh.geometry, material );
+			assert.strictEqual( batchedMesh._multiDrawCount, 2, 'sorted shadow camera draws both instances' );
+
+			// Copy test
+			const target = new BatchedMesh( 4, 1000, 2000, material );
+			target.copy( batchedMesh );
+			assert.strictEqual( target.customCull, customCull, 'customCull is copied' );
+
+			// Reset test
+			batchedMesh.sortObjects = false;
+			batchedMesh.setCustomCull( null );
+			batchedMesh.onBeforeRender( {}, null, camera, batchedMesh.geometry, material );
+			assert.strictEqual( batchedMesh._multiDrawCount, 2, 'unsetting customCull restores all instances' );
+
+		} );
+
 	} );
 
 } );

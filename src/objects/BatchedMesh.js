@@ -252,6 +252,16 @@ class BatchedMesh extends Mesh {
 		 */
 		this.customSort = null;
 
+		/**
+		 * Takes a custom culling function that is run for each instance before render. The function
+		 * takes an instance ID and a camera, and returns a boolean indicating whether the instance
+		 * should be culled (`true`) or rendered (`false`).
+		 *
+		 * @type {?Function}
+		 * @default null
+		 */
+		this.customCull = null;
+
 		// stores visible, active, and geometry id per instance and reserved buffer ranges for geometries
 		this._instanceInfo = [];
 		this._geometryInfo = [];
@@ -502,6 +512,22 @@ class BatchedMesh extends Mesh {
 	setCustomSort( func ) {
 
 		this.customSort = func;
+		return this;
+
+	}
+
+	/**
+	 * Takes a custom culling function that is run for each instance before render. The function
+	 * takes an instance ID and a camera, and returns a boolean indicating whether the instance
+	 * should be culled (`true`) or rendered (`false`).
+	 *
+	 * @param {Function} func - The custom culling function.
+	 * @return {BatchedMesh} A reference to this batched mesh.
+	 */
+	setCustomCull( func ) {
+
+		this.customCull = func;
+		this._visibilityChanged = true;
 		return this;
 
 	}
@@ -1483,6 +1509,8 @@ class BatchedMesh extends Mesh {
 		this.sortObjects = source.sortObjects;
 		this.boundingBox = source.boundingBox !== null ? source.boundingBox.clone() : null;
 		this.boundingSphere = source.boundingSphere !== null ? source.boundingSphere.clone() : null;
+		this.customSort = source.customSort;
+		this.customCull = source.customCull;
 
 		this._geometryInfo = source._geometryInfo.map( info => ( {
 			...info,
@@ -1577,9 +1605,9 @@ class BatchedMesh extends Mesh {
 	 */
 	_updateDrawParameters( camera, geometry, material, drawFormat = 'multiDraw' ) {
 
-		// if visibility has not changed and frustum culling and object sorting is not required
+		// if visibility has not changed and frustum culling, object sorting, and custom culling is not required
 		// then skip iterating over all items
-		if ( ! this._visibilityChanged && ! this.perObjectFrustumCulled && ! this.sortObjects ) {
+		if ( ! this._visibilityChanged && ! this.perObjectFrustumCulled && ! this.sortObjects && this.customCull === null ) {
 
 			return;
 
@@ -1664,6 +1692,12 @@ class BatchedMesh extends Mesh {
 
 					}
 
+					if ( ! culled && this.customCull !== null ) {
+
+						culled = Boolean( this.customCull.call( this, i, camera ) );
+
+					}
+
 					if ( ! culled ) {
 
 						// get the distance from camera used for sorting
@@ -1744,6 +1778,12 @@ class BatchedMesh extends Mesh {
 
 					}
 
+					if ( ! culled && this.customCull !== null ) {
+
+						culled = Boolean( this.customCull.call( this, i, camera ) );
+
+					}
+
 					if ( ! culled ) {
 
 						const geometryInfo = geometryInfoList[ geometryId ];
@@ -1795,7 +1835,7 @@ class BatchedMesh extends Mesh {
 
 		if ( renderer.isWebGPURenderer === true ) {
 
-			if ( this._visibilityChanged || this.perObjectFrustumCulled || this.sortObjects ) {
+			if ( this._visibilityChanged || this.perObjectFrustumCulled || this.sortObjects || this.customCull !== null ) {
 
 				this._indirectTexture.needsUpdate = true;
 
